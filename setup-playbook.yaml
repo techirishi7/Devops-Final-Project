@@ -1,0 +1,42 @@
+---
+- hosts: all
+  become: yes
+
+  tasks:
+
+    - name: Install Docker
+      yum:
+        name: docker
+        state: present
+
+    - name: Start and enable Docker
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add user abc to docker group
+      user:
+        name: abc
+        groups: docker
+        append: yes
+
+    - name: Get DockerHub credentials from AWS Secrets Manager
+      command: >
+        aws secretsmanager get-secret-value
+        --secret-id dockerhub-credentials
+        --query SecretString
+        --output text
+      register: docker_secret
+      changed_when: false
+
+    - name: Parse Docker credentials
+      set_fact:
+        docker_creds: "{{ docker_secret.stdout | from_json }}"
+
+    - name: Login to DockerHub
+      shell: |
+        echo "{{ docker_creds.docker_password }}" | docker login \
+        --username "{{ docker_creds.docker_username }}" \
+        --password-stdin
+      no_log: true
